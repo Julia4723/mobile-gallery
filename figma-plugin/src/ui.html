@@ -1,0 +1,28 @@
+<style>
+  body { font: 12px/1.45 -apple-system, sans-serif; margin: 14px; color: #222; }
+  #status { font-size: 13px; font-weight: 600; }
+  #counters { margin-top: 4px; color: #555; }
+  #tokenForm { margin-top: 12px; }
+  input, button { font: inherit; padding: 6px; width: 100%; margin-top: 6px; box-sizing: border-box; }
+  button { cursor: pointer; }
+  #changeToken { width: auto; margin-top: 12px; padding: 2px 6px; font-size: 11px; }
+  h3 { margin: 14px 0 4px; font-size: 12px; }
+  #errors { margin: 0; padding-left: 16px; color: #b3261e; word-break: break-word; }
+  [hidden] { display: none; }
+</style>
+
+<div id="status">Подключение к серверу…</div>
+<div id="counters"></div>
+
+<div id="tokenForm" hidden>
+  <input id="token" type="password" placeholder="Токен из файла server/.token" />
+  <button id="saveToken">Сохранить</button>
+</div>
+<button id="changeToken" hidden>Сменить токен</button>
+
+<div id="errorsBlock" hidden>
+  <h3>Последние ошибки</h3>
+  <ul id="errors"></ul>
+</div>
+
+<script>/*SCRIPT*/</script>

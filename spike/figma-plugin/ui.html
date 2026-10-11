@@ -1,0 +1,176 @@
+<!-- ОДНОРАЗОВЫЙ КОД ЭКСПЕРИМЕНТА. В продукт не переносится. -->
+<style>
+  body { font: 12px/1.4 -apple-system, sans-serif; margin: 12px; color: #222; }
+  h3 { margin: 14px 0 6px; font-size: 12px; }
+  input, select, button { font: inherit; padding: 5px 6px; box-sizing: border-box; }
+  input, select { width: 100%; }
+  button { margin-top: 6px; width: 100%; cursor: pointer; }
+  pre { background: #f3f3f3; padding: 8px; margin: 6px 0 0; white-space: pre-wrap; word-break: break-all; min-height: 16px; }
+</style>
+
+<h3>Токен</h3>
+<input id="token" type="password" placeholder="токен из терминала сервера" />
+
+<h3>1. Какие адреса доступны из плагина</h3>
+<button id="probe">Проверить адреса</button>
+<pre id="probeOut"></pre>
+
+<h3>2. Вставка последнего загруженного изображения</h3>
+<select id="base"></select>
+<button id="insert">Вставить изображение</button>
+<button id="big">Тест лимита: вставить 6000×4500</button>
+<pre id="insertOut"></pre>
+
+<h3>3. Дополнительно: запрос к неразрешённому домену</h3>
+<button id="blocked">Запросить https://example.com</button>
+<pre id="blockedOut"></pre>
+
+<button id="copy">Скопировать все результаты</button>
+
+<script>
+  var BASES = [
+    'http://localhost:8787',
+    'http://my-mac.local:8787',
+  ];
+  var MAX_SIDE = 4096;
+  var $ = function (id) { return document.getElementById(id); };
+  var send = function (message) { parent.postMessage({ pluginMessage: message }, '*'); };
+  var mainResults = {};
+
+  BASES.forEach(function (base) {
+    var option = document.createElement('option');
+    option.textContent = base;
+    $('base').appendChild(option);
+  });
+
+  $('token').addEventListener('change', function () {
+    send({ type: 'saveToken', token: $('token').value.trim() });
+  });
+
+  function authHeaders() {
+    return { Authorization: 'Bearer ' + $('token').value.trim() };
+  }
+
+  async function tryFetch(url, options) {
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 5000);
+    try {
+      var response = await fetch(url, Object.assign({ signal: controller.signal }, options || {}));
+      return 'HTTP ' + response.status;
+    } catch (error) {
+      return 'ошибка: ' + (error.name === 'AbortError' ? 'таймаут 5 с' : error.message);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function renderProbe(rows) {
+    $('probeOut').textContent = rows.map(function (row) {
+      return row.base + '\n  iframe, без токена:  ' + row.plain +
+        '\n  iframe, с токеном:   ' + row.auth +
+        '\n  main-поток, с токеном: ' + (mainResults[row.base] || '…');
+    }).join('\n');
+  }
+
+  var probeRows = [];
+  $('probe').onclick = async function () {
+    probeRows = [];
+    mainResults = {};
+    $('probeOut').textContent = 'проверяю…';
+    for (var i = 0; i < BASES.length; i++) {
+      var base = BASES[i];
+      probeRows.push({
+        base: base,
+        plain: await tryFetch(base + '/health'),
+        auth: await tryFetch(base + '/auth-check', { headers: authHeaders() }),
+      });
+      renderProbe(probeRows);
+      send({ type: 'mainFetch', url: base + '/auth-check', token: $('token').value.trim() });
+    }
+  };
+
+  // Figma принимает изображения до 4096 px, большие уменьшаем через canvas.
+  async function fitToLimit(blob) {
+    var bitmap = await createImageBitmap(blob);
+    var scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+    var note = 'декодировано в iframe: ' + bitmap.width + '×' + bitmap.height;
+    if (scale === 1) return { blob: blob, note: note + ', без изменений' };
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    var resized = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
+    return { blob: resized, note: note + ', уменьшено до ' + canvas.width + '×' + canvas.height };
+  }
+
+  var insertNote = '';
+  async function insertBlob(original, type) {
+    var fitted = await fitToLimit(original);
+    insertNote = 'тип: ' + type + ', ' + original.size + ' байт\n' + fitted.note;
+    $('insertOut').textContent = insertNote + '\nвставляю…';
+    send({ type: 'insert', bytes: new Uint8Array(await fitted.blob.arrayBuffer()) });
+  }
+
+  $('insert').onclick = async function () {
+    $('insertOut').textContent = 'скачиваю…';
+    try {
+      var response = await fetch($('base').value + '/last', { headers: authHeaders() });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      await insertBlob(await response.blob(), response.headers.get('Content-Type'));
+    } catch (error) {
+      $('insertOut').textContent = 'ошибка в iframe: ' + error.message;
+    }
+  };
+
+  // Проверка лимита 4096 px без сервера: JPEG 6000×4500 создаётся прямо здесь.
+  $('big').onclick = async function () {
+    $('insertOut').textContent = 'создаю 6000×4500…';
+    try {
+      var canvas = document.createElement('canvas');
+      canvas.width = 6000;
+      canvas.height = 4500;
+      var context = canvas.getContext('2d');
+      var gradient = context.createLinearGradient(0, 0, 6000, 4500);
+      gradient.addColorStop(0, '#2b6cff');
+      gradient.addColorStop(1, '#ff7a2b');
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 6000, 4500);
+      var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/jpeg', 0.9); });
+      await insertBlob(blob, 'image/jpeg (создан в плагине)');
+    } catch (error) {
+      $('insertOut').textContent = 'ошибка в iframe: ' + error.message;
+    }
+  };
+
+  $('blocked').onclick = async function () {
+    $('blockedOut').textContent = await tryFetch('https://example.com/');
+  };
+
+  $('copy').onclick = function () {
+    var text = ['[адреса]', $('probeOut').textContent, '[вставка]', $('insertOut').textContent,
+      '[неразрешённый домен]', $('blockedOut').textContent].join('\n');
+    var area = document.createElement('textarea');
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand('copy');
+    area.remove();
+    $('copy').textContent = 'Скопировано';
+  };
+
+  onmessage = function (event) {
+    var msg = event.data.pluginMessage;
+    if (!msg) return;
+    if (msg.type === 'token') $('token').value = msg.token;
+    if (msg.type === 'mainFetchResult') {
+      mainResults[msg.url.replace('/auth-check', '')] = msg.text;
+      renderProbe(probeRows);
+    }
+    if (msg.type === 'insertResult') {
+      $('insertOut').textContent = insertNote + '\n' + (msg.ok
+        ? 'вставлено: исходник ' + msg.result.source + ', узел ' + msg.result.node +
+          '\nузлов на странице: было ' + msg.result.nodesBefore + ', стало ' + msg.result.nodesAfter
+        : 'ошибка в main-потоке: ' + msg.error);
+    }
+  };
+</script>
