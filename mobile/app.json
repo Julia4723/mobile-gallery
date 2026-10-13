@@ -7,7 +7,11 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.julia4723.mobilegallery",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Приложение отправляет изображения на сервер Mobile Gallery, запущенный на вашем компьютере в этой сети Wi-Fi."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -16,13 +20,34 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.julia4723.mobilegallery"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Нужно, чтобы выбрать изображения для отправки в Figma.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      "expo-dev-client",
+      [
+        "./plugins/withLocalCleartext",
+        {
+          "hosts": []
+        }
+      ]
     ]
   }
 }
