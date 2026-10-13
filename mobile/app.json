@@ -48,6 +48,11 @@
           "hosts": []
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "cafbf896-b5e2-49a0-be8f-6f1ab9c9ad21"
+      }
+    }
   }
 }
